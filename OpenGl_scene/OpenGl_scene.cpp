@@ -8,7 +8,7 @@
 #include "Shader.h"
 
 #include <iostream>
-
+#include <vector>
 
 // settings
 const unsigned int SCR_WIDTH = 800;
@@ -63,22 +63,60 @@ int main()
     // ------------------------------------
     Shader ourShader("vertex.vert", "fragment.frag"); // you can name your shader files however you like
 
-    // set up vertex data (and buffer(s)) and configure vertex attributes
-    // ------------------------------------------------------------------
-    float vertices[] = {
-        // positions           // colors
-        1.0f,  1.0f,  1.0f,    1.0f, 0.0f, 0.0f, // v0 - red
-        -1.0f, -1.0f,  1.0f,    0.0f, 1.0f, 0.0f, // v1 - green
-        -1.0f,  1.0f, -1.0f,    0.0f, 0.0f, 1.0f, // v2 - blue
-        1.0f, -1.0f, -1.0f,    1.0f, 1.0f, 0.0f  // v3 - yellow
+    // positions and colors (original four verts)
+    std::vector<glm::vec3> positions = {
+        { 1.0f,  1.0f,  1.0f},
+        {-1.0f, -1.0f,  1.0f},
+        {-1.0f,  1.0f, -1.0f},
+        { 1.0f, -1.0f, -1.0f}
     };
-    
+    std::vector<glm::vec3> colors = {
+        {1.0f, 0.0f, 0.0f},
+        {0.0f, 1.0f, 0.0f},
+        {0.0f, 0.0f, 1.0f},
+        {1.0f, 1.0f, 0.0f}
+    };
+
     unsigned int indices[] = {
         0, 1, 2,
         0, 3, 1,
         0, 2, 3,
         1, 3, 2
     };
+
+    // compute per-vertex normals by averaging face normals
+    std::vector<glm::vec3> normals(positions.size(), glm::vec3(0.0f));
+    for (size_t i = 0; i < sizeof(indices)/sizeof(indices[0]); i += 3)
+    {
+        unsigned int ia = indices[i + 0];
+        unsigned int ib = indices[i + 1];
+        unsigned int ic = indices[i + 2];
+        glm::vec3 e1 = positions[ib] - positions[ia];
+        glm::vec3 e2 = positions[ic] - positions[ia];
+        glm::vec3 faceNormal = glm::normalize(glm::cross(e1, e2));
+        normals[ia] += faceNormal;
+        normals[ib] += faceNormal;
+        normals[ic] += faceNormal;
+    }
+    for (auto &n : normals) n = -glm::normalize(n);
+
+    // build interleaved buffer: pos(3), normal(3), color(3) => stride = 9 floats
+    std::vector<float> interleaved;
+    interleaved.reserve(positions.size() * 9);
+    for (size_t i = 0; i < positions.size(); ++i)
+    {
+        interleaved.push_back(positions[i].x);
+        interleaved.push_back(positions[i].y);
+        interleaved.push_back(positions[i].z);
+
+        interleaved.push_back(normals[i].x);
+        interleaved.push_back(normals[i].y);
+        interleaved.push_back(normals[i].z);
+
+        interleaved.push_back(colors[i].x);
+        interleaved.push_back(colors[i].y);
+        interleaved.push_back(colors[i].z);
+    }
 
     unsigned int VBO, VAO, EBO;
     glGenVertexArrays(1, &VAO);
@@ -88,14 +126,22 @@ int main()
     glBindVertexArray(VAO);
 
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, interleaved.size() * sizeof(float), interleaved.data(), GL_STATIC_DRAW);
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
 
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
+    // attribute layout: location 0 = pos, location 1 = color, location 2 = normal
+    GLsizei stride = 9 * sizeof(float);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, stride, (void*)0);
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
+
+    // normal is placed next (offset = 3 floats)
+    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, stride, (void*)(3 * sizeof(float)));
+    glEnableVertexAttribArray(2);
+
+    // color follows (offset = 6 floats)
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, stride, (void*)(6 * sizeof(float)));
     glEnableVertexAttribArray(1);
 
     while (!glfwWindowShouldClose(window))
@@ -108,7 +154,13 @@ int main()
 
         int fbW, fbH;
         glfwGetFramebufferSize(window, &fbW, &fbH);
-        SetShaderMatrices( ourShader,SCR_WIDTH,SCR_HEIGHT);
+        SetShaderMatrices(ourShader, fbW > 0 ? fbW : SCR_WIDTH, fbH > 0 ? fbH : SCR_HEIGHT);
+
+        // set lighting uniforms (adjust values as needed)
+        ourShader.setVec3("lightPos", glm::vec3(0.0f, 0.0f, 5.0f));
+        ourShader.setVec3("lightColor", glm::vec3(1.0f, 1.0f, 1.0f));
+        ourShader.setVec3("viewPos",  glm::vec3(0.0f, 0.0f, 10.0f)); // camera location (matches your viewTranslate)
+        ourShader.setFloat("shininess", 32.0f);
 
         glBindVertexArray(VAO);
         glDrawElements(GL_TRIANGLES, 12, GL_UNSIGNED_INT, 0);
