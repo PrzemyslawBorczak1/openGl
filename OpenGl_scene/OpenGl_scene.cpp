@@ -63,29 +63,51 @@ int main()
     // ------------------------------------
     Shader ourShader("vertex.vert", "fragment.frag"); // you can name your shader files however you like
 
-    // positions and colors (original four verts)
+    // --- replace the previous cube/tetra setup with this 8-vertex cube + 36 indices ---
+
+    // 8 unique cube positions
     std::vector<glm::vec3> positions = {
-        { 1.0f,  1.0f,  1.0f},
-        {-1.0f, -1.0f,  1.0f},
-        {-1.0f,  1.0f, -1.0f},
-        { 1.0f, -1.0f, -1.0f}
+        {-1.0f, -1.0f, -1.0f}, // 0
+        { 1.0f, -1.0f, -1.0f}, // 1
+        { 1.0f,  1.0f, -1.0f}, // 2
+        {-1.0f,  1.0f, -1.0f}, // 3
+        {-1.0f, -1.0f,  1.0f}, // 4
+        { 1.0f, -1.0f,  1.0f}, // 5
+        { 1.0f,  1.0f,  1.0f}, // 6
+        {-1.0f,  1.0f,  1.0f}  // 7
     };
+
+    // per-vertex colors (one color per unique vertex)
     std::vector<glm::vec3> colors = {
-        {1.0f, 0.0f, 0.0f},
-        {0.0f, 1.0f, 0.0f},
-        {0.0f, 0.0f, 1.0f},
-        {1.0f, 1.0f, 0.0f}
+        {1.0f, 0.0f, 0.0f}, // 0
+        {0.0f, 1.0f, 0.0f}, // 1
+        {0.0f, 0.0f, 1.0f}, // 2
+        {1.0f, 1.0f, 0.0f}, // 3
+        {1.0f, 0.0f, 1.0f}, // 4
+        {0.0f, 1.0f, 1.0f}, // 5
+        {0.8f, 0.8f, 0.8f}, // 6
+        {0.2f, 0.6f, 0.3f}  // 7
     };
 
+    // indices referencing the 8 vertices (12 triangles -> 36 indices)
     unsigned int indices[] = {
-        0, 1, 2,
-        0, 3, 1,
-        0, 2, 3,
-        1, 3, 2
+        // front (+Z)
+        4, 5, 6, 4, 6, 7,
+        // back (-Z)
+        0, 3, 2, 0, 2, 1,
+        // left (-X)
+        0, 4, 7, 0, 7, 3,
+        // right (+X)
+        1, 2, 6, 1, 6, 5,
+        // top (+Y)
+        3, 7, 6, 3, 6, 2,
+        // bottom (-Y)
+        0, 1, 5, 0, 5, 4
     };
 
-    // compute per-vertex normals by averaging face normals
+    // compute per-vertex normals by averaging adjacent face normals
     std::vector<glm::vec3> normals(positions.size(), glm::vec3(0.0f));
+    const size_t triCount = sizeof(indices) / (3 * sizeof(indices[0]));
     for (size_t i = 0; i < sizeof(indices)/sizeof(indices[0]); i += 3)
     {
         unsigned int ia = indices[i + 0];
@@ -98,7 +120,7 @@ int main()
         normals[ib] += faceNormal;
         normals[ic] += faceNormal;
     }
-    for (auto &n : normals) n = -glm::normalize(n);
+    for (auto &n : normals) n = glm::normalize(n);
 
     // build interleaved buffer: pos(3), normal(3), color(3) => stride = 9 floats
     std::vector<float> interleaved;
@@ -118,6 +140,7 @@ int main()
         interleaved.push_back(colors[i].z);
     }
 
+    // create buffers and upload
     unsigned int VBO, VAO, EBO;
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
@@ -128,19 +151,20 @@ int main()
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
     glBufferData(GL_ARRAY_BUFFER, interleaved.size() * sizeof(float), interleaved.data(), GL_STATIC_DRAW);
 
+    GLsizei indexCount = sizeof(indices) / sizeof(indices[0]);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indexCount * sizeof(unsigned int), indices, GL_STATIC_DRAW);
 
-    // attribute layout: location 0 = pos, location 1 = color, location 2 = normal
+    // attribute layout: position(0), normal(2), color(1)
     GLsizei stride = 9 * sizeof(float);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, stride, (void*)0);
     glEnableVertexAttribArray(0);
 
-    // normal is placed next (offset = 3 floats)
+    // normal at offset 3 floats
     glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, stride, (void*)(3 * sizeof(float)));
     glEnableVertexAttribArray(2);
 
-    // color follows (offset = 6 floats)
+    // color at offset 6 floats
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, stride, (void*)(6 * sizeof(float)));
     glEnableVertexAttribArray(1);
 
@@ -163,7 +187,7 @@ int main()
         ourShader.setFloat("shininess", 32.0f);
 
         glBindVertexArray(VAO);
-        glDrawElements(GL_TRIANGLES, 12, GL_UNSIGNED_INT, 0);
+        glDrawElements(GL_TRIANGLES, indexCount, GL_UNSIGNED_INT, 0);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
