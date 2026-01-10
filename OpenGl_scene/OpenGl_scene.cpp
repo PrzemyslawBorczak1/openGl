@@ -14,21 +14,16 @@
 const unsigned int SCR_WIDTH = 800;
 const unsigned int SCR_HEIGHT = 600;
 
-void SetShaderMatrices(int screenWidth, int screenHeight)
+void SetShaderMatrices(const Shader& shader, int screenWidth, int screenHeight)
 {
-    GLint program = 0;
-    glGetIntegerv(GL_CURRENT_PROGRAM, &program);
-    if (program == 0) return;
-
-    float t = static_cast<float>(glfwGetTime());
+    float t = glfwGetTime();
     glm::mat4 model = glm::rotate(glm::mat4(1.0f), t * glm::radians(40.0f), glm::vec3(0.5f, 1.0f, 0.0f));
-    glm::mat4 view  = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -4.0f));
-    glm::mat4 proj  = glm::perspective(glm::radians(45.0f), float(screenWidth) / float(screenHeight), 0.1f, 100.0f);
+    glm::mat4 view = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -10.0f));
+    glm::mat4 proj = glm::perspective(glm::radians(45.0f), float(screenWidth) / float(screenHeight), 0.1f, 100.0f);
 
-    GLint loc;
-    loc = glGetUniformLocation(program, "model");      if (loc >= 0) glUniformMatrix4fv(loc, 1, GL_FALSE, glm::value_ptr(model));
-    loc = glGetUniformLocation(program, "view");       if (loc >= 0) glUniformMatrix4fv(loc, 1, GL_FALSE, glm::value_ptr(view));
-    loc = glGetUniformLocation(program, "projection"); if (loc >= 0) glUniformMatrix4fv(loc, 1, GL_FALSE, glm::value_ptr(proj));
+    shader.setMat4("model", model);
+    shader.setMat4("view", view);
+    shader.setMat4("projection", proj);
 }
 
 int main()
@@ -61,6 +56,8 @@ int main()
     }
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
+   
+    glFrontFace(GL_CW);
 
     // build and compile our shader program
     // ------------------------------------
@@ -111,7 +108,7 @@ int main()
 
         int fbW, fbH;
         glfwGetFramebufferSize(window, &fbW, &fbH);
-        SetShaderMatrices(fbW > 0 ? fbW : SCR_WIDTH, fbH > 0 ? fbH : SCR_HEIGHT);
+        SetShaderMatrices( ourShader,SCR_WIDTH,SCR_HEIGHT);
 
         glBindVertexArray(VAO);
         glDrawElements(GL_TRIANGLES, 12, GL_UNSIGNED_INT, 0);
