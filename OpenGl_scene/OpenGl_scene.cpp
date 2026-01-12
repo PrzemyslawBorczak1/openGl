@@ -9,25 +9,78 @@
 
 #include <iostream>
 #include <vector>
+#include <cmath>
 
 // settings
 const unsigned int SCR_WIDTH = 800;
 const unsigned int SCR_HEIGHT = 600;
 
-void SetShaderMatrices(const Shader& shader, int screenWidth, int screenHeight)
+// Generowanie UV-sfery: pozycje + indeksy (trójk¹ty)
+static void GenerateSphere(
+    float radius,
+    int stacks,     // np. 32
+    int sectors,    // np. 64
+    std::vector<float>& outPositions,        // xyzxyz...
+    std::vector<unsigned int>& outIndices    // triangles
+)
 {
-    float t = glfwGetTime();
-    glm::mat4 model = glm::rotate(glm::mat4(1.0f), t * glm::radians(40.0f), glm::vec3(0.5f, 1.0f, 0.0f));
-    glm::mat4 view = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -10.0f));
-    glm::mat4 proj = glm::perspective(glm::radians(45.0f), float(screenWidth) / float(screenHeight), 0.1f, 100.0f);
+    outPositions.clear();
+    outIndices.clear();
 
-    shader.setMat4("model", model);
-    shader.setMat4("view", view);
-    shader.setMat4("projection", proj);
+    // wierzcho³ki
+    // theta: 0..pi (od bieguna do bieguna)
+    // phi:   0..2pi (dooko³a)
+    const float PI = 3.14159265358979323846f;
+
+    for (int i = 0; i <= stacks; ++i)
+    {
+        float v = (float)i / (float)stacks;      // 0..1
+        float theta = v * PI;                    // 0..pi
+
+        float y = radius * std::cos(theta);
+        float r = radius * std::sin(theta);
+
+        for (int j = 0; j <= sectors; ++j)
+        {
+            float u = (float)j / (float)sectors; // 0..1
+            float phi = u * 2.0f * PI;           // 0..2pi
+
+            float x = r * std::cos(phi);
+            float z = r * std::sin(phi);
+
+            outPositions.push_back(x);
+            outPositions.push_back(y);
+            outPositions.push_back(z);
+        }
+    }
+
+    // indeksy (dwa trójk¹ty na “quad”)
+    // siatka ma (stacks+1) x (sectors+1) wierzcho³ków
+    int ring = sectors + 1;
+
+    for (int i = 0; i < stacks; ++i)
+    {
+        for (int j = 0; j < sectors; ++j)
+        {
+            unsigned int k1 = i * ring + j;
+            unsigned int k2 = (i + 1) * ring + j;
+
+            // triangle 1
+            outIndices.push_back(k1);
+            outIndices.push_back(k2);
+            outIndices.push_back(k1 + 1);
+
+            // triangle 2
+            outIndices.push_back(k1 + 1);
+            outIndices.push_back(k2);
+            outIndices.push_back(k2 + 1);
+        }
+    }
 }
 
 int main()
 {
+    // GLFW init
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
@@ -37,111 +90,38 @@ int main()
 #endif
     glfwWindowHint(GLFW_DEPTH_BITS, 24);
 
-    // glfw window creation
-    // --------------------
-    GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "LearnOpenGL", NULL, NULL);
-    if (window == NULL)
+    GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "Biala kula (wypelniona)", NULL, NULL);
+    if (!window)
     {
-        std::cout << "Failed to create GLFW window" << std::endl;
+        std::cout << "Failed to create GLFW window\n";
         glfwTerminate();
         return -1;
     }
     glfwMakeContextCurrent(window);
-    // glad: load all OpenGL function pointers
-    // ---------------------------------------
+
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
     {
-        std::cout << "Failed to initialize GLAD" << std::endl;
+        std::cout << "Failed to initialize GLAD\n";
         return -1;
     }
+
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
-   
-    glFrontFace(GL_CW);
 
-    // build and compile our shader program
-    // ------------------------------------
-    Shader ourShader("vertex.vert", "fragment.frag"); // you can name your shader files however you like
+    // Shader (u¿ywa Twojej klasy)
+    Shader sphereShader("vertex.vert", "fragment.frag");
 
-    // --- replace the previous cube/tetra setup with this 8-vertex cube + 36 indices ---
+    // --- Geometria sfery ---
+    std::vector<float> positions;            // xyz...
+    std::vector<unsigned int> indices;
 
-    // 8 unique cube positions
-    std::vector<glm::vec3> positions = {
-        {-1.0f, -1.0f, -1.0f}, // 0
-        { 1.0f, -1.0f, -1.0f}, // 1
-        { 1.0f,  1.0f, -1.0f}, // 2
-        {-1.0f,  1.0f, -1.0f}, // 3
-        {-1.0f, -1.0f,  1.0f}, // 4
-        { 1.0f, -1.0f,  1.0f}, // 5
-        { 1.0f,  1.0f,  1.0f}, // 6
-        {-1.0f,  1.0f,  1.0f}  // 7
-    };
+    float radius = 2.0f;
+    int stacks = 32;
+    int sectors = 64;
 
-    // per-vertex colors (one color per unique vertex)
-    std::vector<glm::vec3> colors = {
-        {1.0f, 0.0f, 0.0f}, // 0
-        {0.0f, 1.0f, 0.0f}, // 1
-        {0.0f, 0.0f, 1.0f}, // 2
-        {1.0f, 1.0f, 0.0f}, // 3
-        {1.0f, 0.0f, 1.0f}, // 4
-        {0.0f, 1.0f, 1.0f}, // 5
-        {0.8f, 0.8f, 0.8f}, // 6
-        {0.2f, 0.6f, 0.3f}  // 7
-    };
+    GenerateSphere(radius, stacks, sectors, positions, indices);
 
-    // indices referencing the 8 vertices (12 triangles -> 36 indices)
-    unsigned int indices[] = {
-        // front (+Z)
-        4, 5, 6, 4, 6, 7,
-        // back (-Z)
-        0, 3, 2, 0, 2, 1,
-        // left (-X)
-        0, 4, 7, 0, 7, 3,
-        // right (+X)
-        1, 2, 6, 1, 6, 5,
-        // top (+Y)
-        3, 7, 6, 3, 6, 2,
-        // bottom (-Y)
-        0, 1, 5, 0, 5, 4
-    };
-
-    // compute per-vertex normals by averaging adjacent face normals
-    std::vector<glm::vec3> normals(positions.size(), glm::vec3(0.0f));
-    const size_t triCount = sizeof(indices) / (3 * sizeof(indices[0]));
-    for (size_t i = 0; i < sizeof(indices)/sizeof(indices[0]); i += 3)
-    {
-        unsigned int ia = indices[i + 0];
-        unsigned int ib = indices[i + 1];
-        unsigned int ic = indices[i + 2];
-        glm::vec3 e1 = positions[ib] - positions[ia];
-        glm::vec3 e2 = positions[ic] - positions[ia];
-        glm::vec3 faceNormal = glm::normalize(glm::cross(e1, e2));
-        normals[ia] += faceNormal;
-        normals[ib] += faceNormal;
-        normals[ic] += faceNormal;
-    }
-    for (auto &n : normals) n = glm::normalize(n);
-
-    // build interleaved buffer: pos(3), normal(3), color(3) => stride = 9 floats
-    std::vector<float> interleaved;
-    interleaved.reserve(positions.size() * 9);
-    for (size_t i = 0; i < positions.size(); ++i)
-    {
-        interleaved.push_back(positions[i].x);
-        interleaved.push_back(positions[i].y);
-        interleaved.push_back(positions[i].z);
-
-        interleaved.push_back(normals[i].x);
-        interleaved.push_back(normals[i].y);
-        interleaved.push_back(normals[i].z);
-
-        interleaved.push_back(colors[i].x);
-        interleaved.push_back(colors[i].y);
-        interleaved.push_back(colors[i].z);
-    }
-
-    // create buffers and upload
-    unsigned int VBO, VAO, EBO;
+    unsigned int VAO, VBO, EBO;
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
     glGenBuffers(1, &EBO);
@@ -149,45 +129,51 @@ int main()
     glBindVertexArray(VAO);
 
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, interleaved.size() * sizeof(float), interleaved.data(), GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, positions.size() * sizeof(float), positions.data(), GL_STATIC_DRAW);
 
-    GLsizei indexCount = sizeof(indices) / sizeof(indices[0]);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indexCount * sizeof(unsigned int), indices, GL_STATIC_DRAW);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW);
 
-    // attribute layout: position(0), normal(2), color(1)
-    GLsizei stride = 9 * sizeof(float);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, stride, (void*)0);
+    // layout(location=0) -> vec3 position
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
 
-    // normal at offset 3 floats
-    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, stride, (void*)(3 * sizeof(float)));
-    glEnableVertexAttribArray(2);
+    glBindVertexArray(0);
 
-    // color at offset 6 floats
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, stride, (void*)(6 * sizeof(float)));
-    glEnableVertexAttribArray(1);
+    // --- macierze ---
+    glm::mat4 model = glm::mat4(1.0f);
+    glm::mat4 view = glm::lookAt(
+        glm::vec3(0.0f, 0.0f, 8.0f),  // kamera
+        glm::vec3(0.0f, 0.0f, 0.0f),  // patrzy na œrodek
+        glm::vec3(0.0f, 1.0f, 0.0f)
+    );
 
     while (!glfwWindowShouldClose(window))
     {
-        
-        glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-        ourShader.use();
-
         int fbW, fbH;
         glfwGetFramebufferSize(window, &fbW, &fbH);
-        SetShaderMatrices(ourShader, fbW > 0 ? fbW : SCR_WIDTH, fbH > 0 ? fbH : SCR_HEIGHT);
+        if (fbW <= 0) fbW = SCR_WIDTH;
+        if (fbH <= 0) fbH = SCR_HEIGHT;
 
-        // set lighting uniforms (adjust values as needed)
-        ourShader.setVec3("lightPos", glm::vec3(0.0f, 0.0f, 5.0f));
-        ourShader.setVec3("lightColor", glm::vec3(1.0f, 1.0f, 1.0f));
-        ourShader.setVec3("viewPos",  glm::vec3(0.0f, 0.0f, 10.0f)); // camera location (matches your viewTranslate)
-        ourShader.setFloat("shininess", 32.0f);
+        glViewport(0, 0, fbW, fbH);
+
+        glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)fbW / (float)fbH, 0.1f, 200.0f);
+
+        // t³o czarne
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        sphereShader.use();
+        sphereShader.setMat4("model", model);
+        sphereShader.setMat4("view", view);
+        sphereShader.setMat4("projection", projection);
+
+        // bia³a kula
+        sphereShader.setVec3("uColor", glm::vec3(1.0f, 1.0f, 1.0f));
 
         glBindVertexArray(VAO);
-        glDrawElements(GL_TRIANGLES, indexCount, GL_UNSIGNED_INT, 0);
+        glDrawElements(GL_TRIANGLES, (GLsizei)indices.size(), GL_UNSIGNED_INT, 0);
+        glBindVertexArray(0);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
