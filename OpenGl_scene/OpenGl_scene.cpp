@@ -221,6 +221,14 @@ int main()
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         shader.use();
+        shader.setVec3("lightPos", glm::vec3(0.0f, 5.0f, 5.0f));
+        shader.setVec3("viewPos", glm::vec3(0.0f, 0.0f, 8.0f)); // kamera jak w lookAt()
+
+        shader.setFloat("ambientStrength", 0.20f);
+        shader.setFloat("diffuseStrength", 0.80f);
+        shader.setFloat("specularStrength", 0.50f);
+        shader.setFloat("shininess", 32.0f);
+
         shader.setMat4("view", view);
         shader.setMat4("projection", projection);
 
