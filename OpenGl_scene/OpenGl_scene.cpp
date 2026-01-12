@@ -15,27 +15,23 @@
 const unsigned int SCR_WIDTH = 800;
 const unsigned int SCR_HEIGHT = 600;
 
-// Generowanie UV-sfery: pozycje + indeksy (trójk¹ty)
 static void GenerateSphere(
     float radius,
-    int stacks,     // np. 32
-    int sectors,    // np. 64
-    std::vector<float>& outPositions,        // xyzxyz...
-    std::vector<unsigned int>& outIndices    // triangles
+    int stacks,
+    int sectors,
+    std::vector<float>& outPositions,
+    std::vector<unsigned int>& outIndices
 )
 {
     outPositions.clear();
     outIndices.clear();
 
-    // wierzcho³ki
-    // theta: 0..pi (od bieguna do bieguna)
-    // phi:   0..2pi (dooko³a)
     const float PI = 3.14159265358979323846f;
 
     for (int i = 0; i <= stacks; ++i)
     {
-        float v = (float)i / (float)stacks;      // 0..1
-        float theta = v * PI;                    // 0..pi
+        float v = (float)i / (float)stacks;   // 0..1
+        float theta = v * PI;                 // 0..pi
 
         float y = radius * std::cos(theta);
         float r = radius * std::sin(theta);
@@ -54,10 +50,7 @@ static void GenerateSphere(
         }
     }
 
-    // indeksy (dwa trójk¹ty na “quad”)
-    // siatka ma (stacks+1) x (sectors+1) wierzcho³ków
     int ring = sectors + 1;
-
     for (int i = 0; i < stacks; ++i)
     {
         for (int j = 0; j < sectors; ++j)
@@ -65,12 +58,10 @@ static void GenerateSphere(
             unsigned int k1 = i * ring + j;
             unsigned int k2 = (i + 1) * ring + j;
 
-            // triangle 1
             outIndices.push_back(k1);
             outIndices.push_back(k2);
             outIndices.push_back(k1 + 1);
 
-            // triangle 2
             outIndices.push_back(k1 + 1);
             outIndices.push_back(k2);
             outIndices.push_back(k2 + 1);
@@ -80,7 +71,6 @@ static void GenerateSphere(
 
 int main()
 {
-    // GLFW init
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
@@ -90,7 +80,7 @@ int main()
 #endif
     glfwWindowHint(GLFW_DEPTH_BITS, 24);
 
-    GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "Biala kula (wypelniona)", NULL, NULL);
+    GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "2 biale kule obok siebie", NULL, NULL);
     if (!window)
     {
         std::cout << "Failed to create GLFW window\n";
@@ -108,17 +98,15 @@ int main()
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
 
-    // Shader (u¿ywa Twojej klasy)
     Shader sphereShader("vertex.vert", "fragment.frag");
 
-    // --- Geometria sfery ---
-    std::vector<float> positions;            // xyz...
+    // --------- sphere mesh once ---------
+    std::vector<float> positions;
     std::vector<unsigned int> indices;
 
-    float radius = 2.0f;
+    float radius = 1.5f;
     int stacks = 32;
     int sectors = 64;
-
     GenerateSphere(radius, stacks, sectors, positions, indices);
 
     unsigned int VAO, VBO, EBO;
@@ -134,19 +122,22 @@ int main()
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW);
 
-    // layout(location=0) -> vec3 position
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
 
     glBindVertexArray(0);
 
-    // --- macierze ---
-    glm::mat4 model = glm::mat4(1.0f);
+    // --------- camera (both spheres in view) ---------
     glm::mat4 view = glm::lookAt(
-        glm::vec3(0.0f, 0.0f, 8.0f),  // kamera
-        glm::vec3(0.0f, 0.0f, 0.0f),  // patrzy na œrodek
+        glm::vec3(0.0f, 0.0f, 8.0f),  // camera
+        glm::vec3(0.0f, 0.0f, 0.0f),  // look at center between spheres
         glm::vec3(0.0f, 1.0f, 0.0f)
     );
+
+    // Offsets so NONE is in the center:
+    // left sphere center at x = -2, right sphere center at x = +2 (0 is empty space)
+    glm::mat4 modelLeft = glm::translate(glm::mat4(1.0f), glm::vec3(-5.2f, 0.0f, -10.0f));
+    glm::mat4 modelRight = glm::translate(glm::mat4(1.0f), glm::vec3(5.2f, 0.0f, -10.0f));
 
     while (!glfwWindowShouldClose(window))
     {
@@ -159,20 +150,24 @@ int main()
 
         glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)fbW / (float)fbH, 0.1f, 200.0f);
 
-        // t³o czarne
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         sphereShader.use();
-        sphereShader.setMat4("model", model);
         sphereShader.setMat4("view", view);
         sphereShader.setMat4("projection", projection);
-
-        // bia³a kula
-        sphereShader.setVec3("uColor", glm::vec3(1.0f, 1.0f, 1.0f));
+        sphereShader.setVec3("uColor", glm::vec3(1.0f, 1.0f, 1.0f)); // white
 
         glBindVertexArray(VAO);
+
+        // draw left sphere
+        sphereShader.setMat4("model", modelLeft);
         glDrawElements(GL_TRIANGLES, (GLsizei)indices.size(), GL_UNSIGNED_INT, 0);
+
+        // draw right sphere
+        sphereShader.setMat4("model", modelRight);
+        glDrawElements(GL_TRIANGLES, (GLsizei)indices.size(), GL_UNSIGNED_INT, 0);
+
         glBindVertexArray(0);
 
         glfwSwapBuffers(window);
