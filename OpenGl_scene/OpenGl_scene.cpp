@@ -221,6 +221,15 @@ int main()
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         shader.use();
+        float t = (float)glfwGetTime();
+
+        // œwiat³o kr¹¿y po okrêgu nad scen¹
+        glm::vec3 lightPos;
+        lightPos.x = 6.0f * cos(t);
+        lightPos.y = 4.0f;          // wysokoœæ
+        lightPos.z = 6.0f * sin(t) - 10.0f; // przesuniêcie w g³¹b sceny (bo obiekty s¹ przy z=-10)
+
+        shader.setVec3("lightPos", lightPos);
         shader.setVec3("lightPos", glm::vec3(0.0f, 5.0f, 5.0f));
         shader.setVec3("viewPos", glm::vec3(0.0f, 0.0f, 8.0f)); // kamera jak w lookAt()
 
